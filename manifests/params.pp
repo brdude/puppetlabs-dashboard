@@ -11,36 +11,34 @@
 # Sample Usage:
 #
 class dashboard::params {
-
-  $dashboard_ensure      = 'present'
-  $dashboard_user        = 'puppet-dashboard'
-  $dashboard_group       = 'puppet-dashboard'
-  $dashboard_password    = 'changeme'
-  $dashboard_db          = 'dashboard_production'
-  $dashboard_charset     = 'utf8'
-  $dashboard_environment = 'production'
-  $dashboard_site        = $::fqdn
-  $dashboard_port        = '8080'
-  $passenger             = false
-  $mysql_root_pw         = 'changemetoo'
-  $rails_base_uri        = '/'
-  $rack_version          = '1.1.2'
+  $dashboard_ensure          = 'present'
+  $dashboard_user            = 'puppet-dashboard'
+  $dashboard_group           = 'puppet-dashboard'
+  $dashboard_package         = 'puppet-dashboard'
+  $dashboard_service         = 'puppet-dashboard'
+  $dashboard_workers_service = 'puppet-dashboard-workers'
+  $dashboard_root            = '/usr/share/puppet-dashboard'
+  $dashboard_password        = 'changeme'
+  $dashboard_db              = 'dashboard_production'
+  $dashboard_charset         = 'utf8'
+  $dashboard_environment     = 'production'
+  $dashboard_site            = $::fqdn
+  $dashboard_port            = '8080'
+  $passenger                 = false
+  $passenger_install         = true
+  $mysql_root_pw             = 'changemetoo'
+  $rails_base_uri            = '/'
+  $rack_version              = '1.1.2'
+  $dashboard_version         = latest
 
   case $::osfamily {
 
     'RedHat': {
       $dashboard_config       = '/etc/sysconfig/puppet-dashboard'
-      $dashboard_service      = ['puppet-dashboard','puppet-dashboard-workers']
-      $dashboard_package      = 'puppet-dashboard'
-      $dashboard_root         = '/usr/share/puppet-dashboard'
     }
 
     'Debian': {
       $dashboard_config          = '/etc/default/puppet-dashboard'
-      $dashboard_service         = 'puppet-dashboard'
-      $dashboard_package         = 'puppet-dashboard'
-      $dashboard_root            = '/usr/share/puppet-dashboard'
-      $dashboard_workers_service = 'puppet-dashboard-workers'
       $dashboard_workers_config  = '/etc/default/puppet-dashboard-workers'
       $dashboard_num_workers     = '4'
       $dashboard_workers_start   = 'yes'

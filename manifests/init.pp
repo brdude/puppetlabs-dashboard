@@ -17,6 +17,15 @@
 #   [*dashboard_password*]
 #     - Password for the puppet-dashboard database use
 #
+#   [*dashboard_service*]
+#     - The Dashboard init service
+#
+#   [*dashboard_package*]
+#     - The Dashboard package name
+#
+#   [*dashboard_version*]
+#     - The version of Dashboard to be installed
+#
 #   [*dashboard_db*]
 #     - The puppet-dashboard database name
 #
@@ -100,6 +109,9 @@ class dashboard (
   $dashboard_user            = $dashboard::params::dashboard_user,
   $dashboard_group           = $dashboard::params::dashboard_group,
   $dashboard_password        = $dashboard::params::dashboard_password,
+  $dashboard_service         = $dashboard::params::dashboard_service,
+  $dashboard_package         = $dashboard::params::dashboard_package,
+  $dashboard_version         = $dashboard::params::dashboard_version,
   $dashboard_db              = $dashboard::params::dashboard_db,
   $dashboard_environment     = $dashboard::params::dashboard_environment,
   $dashboard_charset         = $dashboard::params::dashboard_charset,
@@ -115,11 +127,13 @@ class dashboard (
   $passenger_install         = $dashboard::params::passenger_install,
   $mysql_package_provider    = $dashboard::params::mysql_package_provider,
   $ruby_mysql_package        = $dashboard::params::ruby_mysql_package,
-  $dashboard_config          = $dashboard::params::dashboard_config,
   $dashboard_root            = $dashboard::params::dashboard_root,
   $rails_base_uri            = $dashboard::params::rails_base_uri,
   $rack_version              = $dashboard::params::rack_version
 ) inherits dashboard::params {
+
+  include ::ruby
+  include ::ruby::dev
 
   class { 'mysql::server':
     root_password => $mysql_root_pw,
@@ -137,56 +151,41 @@ class dashboard (
       dashboard_root    => $dashboard_root,
       rails_base_uri    => $rails_base_uri,
       passenger_install => $passenger_install,
+      dashboard_service => $dashboard_service,
+      dashboard_package => $dashboard_package,
     }
     # debian needs the configuration files for dashboard to start the
     # dashboard workers
     if $::osfamily == 'Debian' {
-      file { 'dashboard_config':
+      file { 'dashboard_workers_config':
         ensure  => present,
-        path    => $dashboard_config,
-        content => template("dashboard/config.${::osfamily}.erb"),
+        path    => $dashboard_workers_config,
+        content => template("dashboard/workers.config.${::osfamily}.erb"),
         owner   => '0',
         group   => '0',
         mode    => '0644',
-        require => Package[$dashboard_package],
-      }
-      file { 'dashboard_workers_config':
-        ensure =>  present,
-        path => $dashboard_workers_config,
-        content => template("dashboard/workers.config.${::osfamily}.erb"),
-        owner => '0',
-        group => '0',
-        mode => '0644',
         require => Package[$dashboard_package]
       }
-      # enable the workers service
-      service { $dashboard_workers_service:
-        ensure     => running,
-        enable     => true,
-        hasrestart => true,
-        subscribe  => File['/etc/puppet-dashboard/database.yml'],
-        require    => Exec['db-migrate']
-      }
+    }
+  }
 
-    }
-  } else {
-    file { 'dashboard_config':
-      ensure  => present,
-      path    => $dashboard_config,
-      content => template("dashboard/config.${::osfamily}.erb"),
-      owner   => '0',
-      group   => '0',
-      mode    => '0644',
-      require => Package[$dashboard_package],
-    }
+  file { 'dashboard_config':
+    ensure  => present,
+    path    => $dashboard_config,
+    content => template("dashboard/config.${::osfamily}.erb"),
+    owner   => '0',
+    group   => '0',
+    mode    => '0644',
+    require => Package[$dashboard_package],
+  }
 
-    service { $dashboard_service:
-      ensure     => running,
-      enable     => true,
-      hasrestart => true,
-      subscribe  => File['/etc/puppet-dashboard/database.yml'],
-      require    => Exec['db-migrate']
-    }
+  # enable the workers service
+  service { $dashboard_workers_service:
+    ensure     => running,
+    enable     => true,
+    hasrestart => true,
+    subscribe  => File['/etc/puppet-dashboard/database.yml'],
+    require    => Ruby::Rake['db-migrate']
   }
 
   package { $dashboard_package:
@@ -201,7 +200,7 @@ class dashboard (
     provider => 'gem',
   }
 
-  package { ['rake', 'rdoc']:
+  package { 'rdoc':
     ensure   => present,
     provider => 'gem',
   }
@@ -213,11 +212,12 @@ class dashboard (
     require => Package[$dashboard_package],
   }
 
-  file { [ "${dashboard::params::dashboard_root}/public",
-           "${dashboard::params::dashboard_root}/tmp",
-           "${dashboard::params::dashboard_root}/log",
-           "${dashboard::params::dashboard_root}/spool",
-           '/etc/puppet-dashboard' ]:
+  file {
+    [ "${dashboard::params::dashboard_root}/public",
+      "${dashboard::params::dashboard_root}/tmp",
+      "${dashboard::params::dashboard_root}/log",
+      "${dashboard::params::dashboard_root}/spool",
+      '/etc/puppet-dashboard' ]:
     ensure       => directory,
     recurse      => true,
     recurselimit => '1',
@@ -233,7 +233,9 @@ class dashboard (
     target => '/etc/puppet-dashboard/database.yml',
   }
 
-  file { [ "${dashboard::params::dashboard_root}/log/production.log", "${dashboard::params::dashboard_root}/config/environment.rb" ]:
+  file {
+    [ "${dashboard::params::dashboard_root}/log/production.log",
+      "${dashboard::params::dashboard_root}/config/environment.rb"]:
     ensure => file,
     mode   => '0644',
   }
@@ -245,14 +247,14 @@ class dashboard (
     group   => '0',
     mode    => '0644',
   }
-
-  exec { 'db-migrate':
-    command => 'rake RAILS_ENV=production db:migrate',
-    cwd     => $dashboard::params::dashboard_root,
-    path    => '/usr/bin/:/usr/local/bin/',
-    creates => "/var/lib/mysql/${dashboard_db}/nodes.frm",
-    require => [Package[$dashboard_package], Mysql::Db[$dashboard_db],
-                File["${dashboard::params::dashboard_root}/config/database.yml"]],
+  
+  ruby::rake { 'db-migrate':
+  task    => 'db:migrate',
+  creates => "/var/lib/mysql/${dashboard_db}/nodes.frm",
+  cwd     => $dashboard::params::dashboard_root,
+  path    => '/usr/bin/:/usr/local/bin/',
+  require => [Package[$dashboard_package], Mysql::Db[$dashboard_db],
+               File["${dashboard::params::dashboard_root}/config/database.yml"]],
   }
 
   mysql::db { $dashboard_db:

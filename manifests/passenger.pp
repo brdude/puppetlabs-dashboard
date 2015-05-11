@@ -28,32 +28,27 @@
 # Sample Usage:
 #
 class dashboard::passenger (
-  $passenger_install = true,
+  $passenger_install,
   $dashboard_site,
   $dashboard_port,
   $dashboard_config,
   $dashboard_root,
   $rails_base_uri,
+  $dashboard_service,
+  $dashboard_package,
 ) inherits dashboard {
 
   if $passenger_install {
     require ::passenger
   }
   include apache
-
-  file { '/etc/init.d/puppet-dashboard':
-    ensure => absent,
+  
+  service { $dashboard_service:
+    ensure     => stopped,
+    enable     => false,
+    hasrestart => true,
+    require    => Package[$dashboard_package],
   }
-
-  # in debian, the dashboard workers config sources the main config.
-  # so we need to keep it
-  if $::osfamily != 'Debian' {
-    file { 'dashboard_config':
-      ensure => absent,
-      path   => $dashboard_config,
-    }
-  }
-
 
   apache::vhost { $dashboard_site:
     port              => $dashboard_port,
